@@ -1,0 +1,21 @@
+# BetterEnderChest configuration
+# Author: Linsaftw
+
+enderchest:
+  rows: 6
+  title: "&5Better Ender Chest"
+  auto-save: true
+  save-interval-seconds: 300
+
+messages:
+  enderchest-opened: "&7Opening your enderchest..."
+  admin-enderchest-opened: "&7Opening &e{player}'s &7enderchest..."
+  player-not-found: "&cPlayer '{player}' not found or never played before!"
+  no-permission: "&cYou don't have permission to use this command!"
+  error-loading: "&cError loading enderchest data!"
+  error-saving: "&cError saving enderchest data!"
+  data-saved: "&aEnderchest data saved successfully!"
+  player-only: "&cOnly players can use this command."
+  admin-usage: "&cUsage: /ecadmin <player>"
+
+debug: false

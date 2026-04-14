@@ -1,0 +1,30 @@
+name: BetterEnderChest
+version: 1.0.0
+main: io.linsaftw.betterenderchest.BetterEnderChestPlugin
+softdepend: [LuckPerms]
+author: LinsaFTW
+description: Professional double ender chest plugin with clean storage and Folia-safe scheduling
+folia-supported: true
+commands:
+  ec:
+    description: Open your double enderchest
+    aliases: [enderchest, ech]
+    usage: /ec
+  ecadmin:
+    description: Open another player's enderchest (admin only)
+    usage: /ecadmin <player> [clear|view]
+    permission: betterenderchest.admin
+    aliases: [enderchestadmin]
+
+permissions:
+  betterenderchest.use:
+    description: Allows using the enderchest command
+    default: true
+  betterenderchest.admin:
+    description: Allows access to admin enderchest commands
+    default: op
+
+# Legacy nodes remain accepted in code for backwards compatibility:
+# - enderchest.use
+# - enderchest.admin
+# - enderchest.admin.lol
