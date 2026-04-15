@@ -46,7 +46,11 @@ public final class EnderChestAdminCommand implements CommandExecutor, TabComplet
 
         try {
             final String resolvedTargetName = targetPlayer.getName() != null ? targetPlayer.getName() : targetPlayerName;
-            this.plugin.getEnderChestService().openAdminChest(player, targetPlayer.getUniqueId(), resolvedTargetName);
+            boolean opened = this.plugin.getEnderChestService().openAdminChest(player, targetPlayer.getUniqueId(), resolvedTargetName);
+            if (!opened) {
+                player.sendMessage(this.plugin.getPluginConfig().getMessage("chest-in-use"));
+                return true;
+            }
         } catch (Exception e) {
             player.sendMessage(this.plugin.getPluginConfig().getMessage("error-loading"));
             this.plugin.getLogger().severe("Error opening admin chest for " + targetPlayerName + ": " + e.getMessage());

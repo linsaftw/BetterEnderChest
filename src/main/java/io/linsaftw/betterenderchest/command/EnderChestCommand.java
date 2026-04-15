@@ -30,7 +30,11 @@ public final class EnderChestCommand implements CommandExecutor, TabCompleter {
             }
 
             try {
-                this.plugin.getEnderChestService().openOwnChest(player);
+                boolean opened = this.plugin.getEnderChestService().openOwnChest(player);
+                if (!opened) {
+                    player.sendMessage(this.plugin.getPluginConfig().getMessage("chest-in-use"));
+                    return true;
+                }
             } catch (Exception e) {
                 player.sendMessage(this.plugin.getPluginConfig().getMessage("error-loading"));
                 this.plugin.getLogger().severe("Error opening enderchest for " + player.getName() + ": " + e.getMessage());

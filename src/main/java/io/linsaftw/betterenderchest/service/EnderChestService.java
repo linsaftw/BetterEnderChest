@@ -2,9 +2,9 @@ package io.linsaftw.betterenderchest.service;
 
 import io.linsaftw.betterenderchest.BetterEnderChestPlugin;
 import io.linsaftw.betterenderchest.config.BetterEnderChestConfig;
-import io.linsaftw.betterenderchest.folia.FoliaTasks;
 import io.linsaftw.betterenderchest.inventory.ManagedEnderChestHolder;
 import io.linsaftw.betterenderchest.storage.ChestRepository;
+import io.linsaftw.betterenderchest.utils.FoliaAPI;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -18,19 +18,21 @@ public class EnderChestService {
     private final BetterEnderChestPlugin plugin;
     private final BetterEnderChestConfig pluginConfig;
     private final ChestRepository chestRepository;
-    private final FoliaTasks foliaTasks;
+    private final FoliaAPI foliaApi;
     private final ConcurrentMap<UUID, Inventory> loadedChests;
+    private final ConcurrentMap<UUID, UUID> activeViewerByChest;
 
     public EnderChestService(
             BetterEnderChestPlugin plugin,
             BetterEnderChestConfig pluginConfig,
             ChestRepository chestRepository,
-            FoliaTasks foliaTasks) {
+            FoliaAPI foliaApi) {
         this.plugin = plugin;
         this.pluginConfig = pluginConfig;
         this.chestRepository = chestRepository;
-        this.foliaTasks = foliaTasks;
+        this.foliaApi = foliaApi;
         this.loadedChests = new ConcurrentHashMap<>();
+        this.activeViewerByChest = new ConcurrentHashMap<>();
     }
 
     public Inventory getOrLoad(Player player) {
@@ -45,14 +47,26 @@ public class EnderChestService {
         });
     }
 
-    public void openOwnChest(Player player) {
-        Inventory chest = getOrLoad(player);
-        player.openInventory(chest);
+    public boolean openOwnChest(Player player) {
+        return openChestForViewer(player, player.getUniqueId(), player.getName());
     }
 
-    public void openAdminChest(Player viewer, UUID ownerUuid, String ownerName) {
+    public boolean openAdminChest(Player viewer, UUID ownerUuid, String ownerName) {
+        return openChestForViewer(viewer, ownerUuid, ownerName);
+    }
+
+    private boolean openChestForViewer(Player viewer, UUID ownerUuid, String ownerName) {
+        UUID existingViewer = activeViewerByChest.get(ownerUuid);
+        if (existingViewer != null && !existingViewer.equals(viewer.getUniqueId())) {
+            Player currentViewer = Bukkit.getPlayer(existingViewer);
+            if (currentViewer != null && currentViewer.isOnline()) {
+                return false;
+            }
+        }
+        activeViewerByChest.put(ownerUuid, viewer.getUniqueId());
         Inventory chest = getOrLoad(ownerUuid, ownerName);
         viewer.openInventory(chest);
+        return true;
     }
 
     public void migrateVanillaContentsIfNeeded(Player player) {
@@ -98,39 +112,51 @@ public class EnderChestService {
         Inventory chest = loadedChests.get(ownerUuid);
         if (chest == null) return;
 
-        ItemStack[] snapshot = cloneContents(chest.getContents());
+        Player activeViewer = getActiveViewer(ownerUuid);
+        if (activeViewer != null) {
+            foliaApi.runEntity(activeViewer, () -> snapshotAndSave(ownerUuid, chest));
+        } else {
+            snapshotAndSave(ownerUuid, chest);
+        }
+    }
 
-        foliaTasks.runAsync(() -> {
-            String ownerName = getOwnerName(chest);
-            chestRepository.save(ownerUuid, ownerName, snapshot);
-        });
+    public void scheduleAutoSavePass() {
+        for (UUID uuid : loadedChests.keySet()) {
+            save(uuid);
+        }
     }
 
     public void saveAll() {
+        scheduleAutoSavePass();
+    }
+
+    public void saveAllNow() {
         for (UUID uuid : loadedChests.keySet()) {
             Inventory chest = loadedChests.get(uuid);
             if (chest == null) continue;
 
             ItemStack[] snapshot = cloneContents(chest.getContents());
             String ownerName = getOwnerName(chest);
-
-            foliaTasks.runAsync(() -> {
-                chestRepository.save(uuid, ownerName, snapshot);
-            });
+            chestRepository.save(uuid, ownerName, snapshot);
         }
     }
 
     public void unload(UUID ownerUuid) {
         Inventory chest = loadedChests.get(ownerUuid);
         if (chest != null) {
+            activeViewerByChest.remove(ownerUuid);
             ItemStack[] snapshot = cloneContents(chest.getContents());
             String ownerName = getOwnerName(chest);
             loadedChests.remove(ownerUuid);
 
-            foliaTasks.runAsync(() -> {
+            foliaApi.runAsync(() -> {
                 chestRepository.save(ownerUuid, ownerName, snapshot);
             });
         }
+    }
+
+    public void releaseViewer(final UUID ownerUuid, final UUID viewerUuid) {
+        activeViewerByChest.remove(ownerUuid, viewerUuid);
     }
 
     public boolean isManagedInventory(Inventory inventory) {
@@ -142,6 +168,20 @@ public class EnderChestService {
             return holder.getOwnerUuid();
         }
         return null;
+    }
+
+    private Player getActiveViewer(final UUID ownerUuid) {
+        UUID viewerUuid = activeViewerByChest.get(ownerUuid);
+        if (viewerUuid == null) return null;
+        Player player = Bukkit.getPlayer(viewerUuid);
+        if (player == null || !player.isOnline()) return null;
+        return player;
+    }
+
+    private void snapshotAndSave(final UUID ownerUuid, final Inventory chest) {
+        ItemStack[] snapshot = cloneContents(chest.getContents());
+        String ownerName = getOwnerName(chest);
+        chestRepository.save(ownerUuid, ownerName, snapshot);
     }
 
     private ItemStack[] cloneContents(ItemStack[] contents) {

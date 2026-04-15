@@ -17,5 +17,6 @@ messages:
   data-saved: "&aEnderchest data saved successfully!"
   player-only: "&cOnly players can use this command."
   admin-usage: "&cUsage: /ecadmin <player>"
+  chest-in-use: "&cThis ender chest is already open by another player."
 
 debug: false

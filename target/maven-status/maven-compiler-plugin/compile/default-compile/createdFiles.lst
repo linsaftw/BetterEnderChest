@@ -1,11 +1,11 @@
 io/linsaftw/betterenderchest/storage/ChestRepository.class
 io/linsaftw/betterenderchest/inventory/ManagedEnderChestHolder.class
-io/linsaftw/betterenderchest/folia/FoliaTasks.class
 io/linsaftw/betterenderchest/listener/EnderChestListener.class
 io/linsaftw/betterenderchest/service/PermissionService.class
 io/linsaftw/betterenderchest/BetterEnderChestPlugin.class
 io/linsaftw/betterenderchest/storage/YamlChestRepository.class
 io/linsaftw/betterenderchest/service/EnderChestService.class
+io/linsaftw/betterenderchest/utils/FoliaAPI.class
 io/linsaftw/betterenderchest/command/EnderChestAdminCommand.class
 io/linsaftw/betterenderchest/command/EnderChestCommand.class
 io/linsaftw/betterenderchest/config/BetterEnderChestConfig.class

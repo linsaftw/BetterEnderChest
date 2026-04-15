@@ -3,7 +3,7 @@ package io.linsaftw.betterenderchest;
 import io.linsaftw.betterenderchest.command.EnderChestAdminCommand;
 import io.linsaftw.betterenderchest.command.EnderChestCommand;
 import io.linsaftw.betterenderchest.config.BetterEnderChestConfig;
-import io.linsaftw.betterenderchest.folia.FoliaTasks;
+import io.linsaftw.betterenderchest.utils.FoliaAPI;
 import io.linsaftw.betterenderchest.listener.EnderChestListener;
 import io.linsaftw.betterenderchest.service.EnderChestService;
 import io.linsaftw.betterenderchest.service.PermissionService;
@@ -15,7 +15,7 @@ public final class BetterEnderChestPlugin extends JavaPlugin {
     private static BetterEnderChestPlugin instance;
 
     private BetterEnderChestConfig pluginConfig;
-    private FoliaTasks foliaTasks;
+    private FoliaAPI foliaApi;
     private PermissionService permissionService;
     private ChestRepository chestRepository;
     private EnderChestService enderChestService;
@@ -24,10 +24,11 @@ public final class BetterEnderChestPlugin extends JavaPlugin {
         instance = this;
         this.pluginConfig = new BetterEnderChestConfig(this);
         this.pluginConfig.reload();
-        this.foliaTasks = new FoliaTasks(this);
+        this.foliaApi = new FoliaAPI(this);
+        this.getLogger().info(this.foliaApi.isFolia() ? "Folia mode: enabled" : "Folia mode: disabled (Bukkit/Paper scheduler fallback)");
         this.permissionService = new PermissionService();
         this.chestRepository = new YamlChestRepository(this);
-        this.enderChestService = new EnderChestService(this, this.pluginConfig, this.chestRepository, this.foliaTasks);
+        this.enderChestService = new EnderChestService(this, this.pluginConfig, this.chestRepository, this.foliaApi);
         this.registerCommands();
         this.registerListeners();
         this.startAutoSaveTask();
@@ -36,8 +37,11 @@ public final class BetterEnderChestPlugin extends JavaPlugin {
     }
 
     public void onDisable() {
+        if (this.foliaApi != null) {
+            this.foliaApi.cancelPluginTasks();
+        }
         if (this.enderChestService != null) {
-            this.enderChestService.saveAll();
+            this.enderChestService.saveAllNow();
         }
         this.getLogger().info("BetterEnderChest disabled.");
     }
@@ -70,7 +74,7 @@ public final class BetterEnderChestPlugin extends JavaPlugin {
         }
 
         final long periodTicks = this.pluginConfig.getAutoSaveIntervalTicks();
-        this.foliaTasks.runGlobalTimer(ignored -> this.enderChestService.saveAll(), periodTicks, periodTicks);
+        this.foliaApi.runGlobalTimer(ignored -> this.enderChestService.scheduleAutoSavePass(), periodTicks, periodTicks);
     }
 
     public static BetterEnderChestPlugin getInstance() {
@@ -79,10 +83,6 @@ public final class BetterEnderChestPlugin extends JavaPlugin {
 
     public BetterEnderChestConfig getPluginConfig() {
         return this.pluginConfig;
-    }
-
-    public FoliaTasks getFoliaTasks() {
-        return this.foliaTasks;
     }
 
     public PermissionService getPermissionService() {

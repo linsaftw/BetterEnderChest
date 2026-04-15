@@ -35,7 +35,10 @@ public final class EnderChestListener implements Listener {
                     event.setCancelled(true);
                 } else {
                     event.setCancelled(true);
-                    this.plugin.getEnderChestService().openOwnChest(player);
+                    boolean opened = this.plugin.getEnderChestService().openOwnChest(player);
+                    if (!opened) {
+                        player.sendMessage(this.plugin.getPluginConfig().getMessage("chest-in-use"));
+                    }
                 }
             }
         }
@@ -47,6 +50,7 @@ public final class EnderChestListener implements Listener {
         Inventory inventory = event.getInventory();
         if (this.plugin.getEnderChestService().isManagedInventory(inventory)) {
             final UUID ownerUuid = this.plugin.getEnderChestService().getManagedOwner(inventory);
+            this.plugin.getEnderChestService().releaseViewer(ownerUuid, player.getUniqueId());
             this.plugin.getEnderChestService().save(ownerUuid);
         }
     }
