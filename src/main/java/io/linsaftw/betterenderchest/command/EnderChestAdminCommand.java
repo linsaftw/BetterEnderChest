@@ -1,12 +1,16 @@
 package io.linsaftw.betterenderchest.command;
 
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.logging.Logger;
+import java.util.Map;
+import java.util.logging.Level;
 import java.util.stream.Collectors;
 import io.linsaftw.betterenderchest.BetterEnderChestPlugin;
+import io.linsaftw.betterenderchest.service.EnderChestService;
+import io.linsaftw.betterenderchest.text.TextBridge;
+import io.linsaftw.betterenderchest.text.TextCodec;
 import org.bukkit.Bukkit;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
@@ -17,45 +21,50 @@ import org.bukkit.entity.Player;
 
 public final class EnderChestAdminCommand implements CommandExecutor, TabCompleter {
     private final BetterEnderChestPlugin plugin;
+    private final TextBridge texts;
 
     public EnderChestAdminCommand(BetterEnderChestPlugin plugin) {
         this.plugin = plugin;
+        this.texts = new TextBridge(plugin, new TextCodec());
     }
 
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!(sender instanceof Player)) {
-            sender.sendMessage(this.plugin.getPluginConfig().getMessage("player-only"));
+            texts.send(sender, this.plugin.getPluginConfig().getMessageSource("player-only"));
             return true;
         }
 
         Player player = (Player) sender;
         if (!this.plugin.getPermissionService().canAdmin(player)) {
-            player.sendMessage(this.plugin.getPluginConfig().getMessage("no-permission"));
+            texts.send(player, this.plugin.getPluginConfig().getMessageSource("no-permission"));
             return true;
-        } else if (args.length != 1) {
-            player.sendMessage(this.plugin.getPluginConfig().getMessage("admin-usage"));
+        }
+        if (args.length != 1) {
+            texts.send(player, this.plugin.getPluginConfig().getMessageSource("admin-usage"));
             return true;
         }
 
         String targetPlayerName = args[0];
         final OfflinePlayer targetPlayer = Bukkit.getOfflinePlayer(targetPlayerName);
         if (!targetPlayer.hasPlayedBefore() && !targetPlayer.isOnline()) {
-            player.sendMessage(this.plugin.getPluginConfig().getMessage("player-not-found", "player", targetPlayerName));
+            Map<String, String> missing = new HashMap<String, String>();
+            missing.put("player", targetPlayerName);
+            texts.send(player, this.plugin.getPluginConfig().getMessageSource("player-not-found"), missing);
             return true;
         }
 
         try {
             final String resolvedTargetName = targetPlayer.getName() != null ? targetPlayer.getName() : targetPlayerName;
-            boolean opened = this.plugin.getEnderChestService().openAdminChest(player, targetPlayer.getUniqueId(), resolvedTargetName);
-            if (!opened) {
-                player.sendMessage(this.plugin.getPluginConfig().getMessage("chest-in-use"));
-                return true;
+            EnderChestService.OpenResult result = this.plugin.getEnderChestService()
+                    .openAdminChest(player, targetPlayer.getUniqueId(), resolvedTargetName);
+            if (result == EnderChestService.OpenResult.STARTED) {
+                Map<String, String> opened = new HashMap<String, String>();
+                opened.put("player", resolvedTargetName);
+                texts.send(player, this.plugin.getPluginConfig().getMessageSource("admin-enderchest-opened"), opened);
             }
         } catch (Exception e) {
-            player.sendMessage(this.plugin.getPluginConfig().getMessage("error-loading"));
-            this.plugin.getLogger().severe("Error opening admin chest for " + targetPlayerName + ": " + e.getMessage());
-            this.plugin.getLogger().severe("Stack trace: ");
-            this.plugin.getLogger().severe(Arrays.toString(e.getStackTrace()));
+            texts.send(player, this.plugin.getPluginConfig().getMessageSource("error-loading"));
+            this.plugin.getLogger().log(Level.SEVERE, "Error opening admin chest for " + targetPlayerName, e);
         }
 
         return true;

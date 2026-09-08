@@ -1,7 +1,11 @@
 package io.linsaftw.betterenderchest.config;
 
-import org.bukkit.ChatColor;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 public class BetterEnderChestConfig {
     private final JavaPlugin plugin;
@@ -19,13 +23,27 @@ public class BetterEnderChestConfig {
     }
 
     private void validateConfig() {
-        int rows = config.getInt("enderchest.rows", 6);
-        if (rows < 1) {
-            plugin.getLogger().warning("Invalid rows value (" + rows + "), setting to minimum (1)");
-            config.set("enderchest.rows", 1);
-        } else if (rows > 6) {
-            plugin.getLogger().warning("Invalid rows value (" + rows + "), setting to maximum (6)");
-            config.set("enderchest.rows", 6);
+        migrateLegacyRows(config);
+
+        final int defaultRows = config.getInt("storage.default-rows", 3);
+        if (defaultRows < 1 || defaultRows > 6) {
+            final int fallbackRows = Math.max(1, Math.min(defaultRows, 6));
+            plugin.getLogger().warning("Invalid storage.default-rows value (" + defaultRows
+                    + "), setting to " + fallbackRows);
+            config.set("storage.default-rows", fallbackRows);
+        }
+
+        for (final String tier : Arrays.asList("special", "mvp", "elite", "mythical", "celestial", "immortal", "patron")) {
+            final String path = "storage.tiers." + tier + ".rows";
+            if (config.contains(path)) {
+                final int rows = config.getInt(path, 1);
+                if (rows < 1 || rows > 54) {
+                    final int clamped = Math.max(1, Math.min(rows, 54));
+                    plugin.getLogger().warning("Invalid storage.tiers." + tier + ".rows value (" + rows
+                            + "), setting to " + clamped);
+                    config.set(path, clamped);
+                }
+            }
         }
 
         int saveInterval = config.getInt("enderchest.save-interval-seconds", 300);
@@ -37,20 +55,127 @@ public class BetterEnderChestConfig {
         plugin.saveConfig();
     }
 
-    public int getRows() {
-        int rows = config.getInt("enderchest.rows", 6);
+    static boolean migrateLegacyRows(final FileConfiguration config) {
+        boolean changed = false;
+        if (!config.contains("storage.default-rows") && config.contains("enderchest.rows")) {
+            final int legacyRows = config.getInt("enderchest.rows", 3);
+            config.set("storage.default-rows", Math.max(1, Math.min(legacyRows, 6)));
+            changed = true;
+        }
+        if (config.contains("enderchest.rows")) {
+            config.set("enderchest.rows", null);
+            changed = true;
+        }
+
+        final int defaultRows = config.getInt("storage.default-rows", 3);
+        if (!config.contains("storage.default-rows")) {
+            config.set("storage.default-rows", 3);
+            changed = true;
+        } else if (defaultRows < 1 || defaultRows > 6) {
+            config.set("storage.default-rows", Math.max(1, Math.min(defaultRows, 6)));
+            changed = true;
+        }
+        return changed;
+    }
+
+    public int getStorageDefaultRows() {
+        int rows = config.getInt("storage.default-rows", 3);
         if (rows < 1) return 1;
         if (rows > 6) return 6;
         return rows;
     }
 
-    public int getInventorySize() {
-        return getRows() * 9;
+    public List<StorageTier> getStorageTiers() {
+        return Arrays.asList(
+                getTier("special", 6),
+                getTier("mvp", 10),
+                getTier("elite", 15),
+                getTier("mythical", 20),
+                getTier("celestial", 25),
+                getTier("immortal", 30),
+                getTier("patron", 35));
+    }
+
+    private StorageTier getTier(final String tier, final int fallbackRows) {
+        final String fallbackPermission = "betterenderchest.rows." + tier;
+        final String permission = config.getString("storage.tiers." + tier + ".permission", fallbackPermission);
+        return new StorageTier(tier, permission, getTierRows(tier, fallbackRows));
+    }
+
+    private int getTierRows(final String tier, final int fallback) {
+        final int rows = config.getInt("storage.tiers." + tier + ".rows", fallback);
+        if (rows < 1) return 1;
+        if (rows > 54) return 54;
+        return rows;
+    }
+
+    public ControlItemDefinition getControlItem(final String key, final ControlItemDefinition fallback) {
+        final String path = "controls." + key;
+        if (config == null || !config.contains(path)) {
+            return fallback;
+        }
+        final String modern;
+        final String legacy;
+        final int legacyData;
+        if (config.contains(path + ".material.modern") || config.contains(path + ".material.legacy")
+                || config.contains(path + ".material.legacy-data")) {
+            modern = config.getString(path + ".material.modern",
+                    fallback == null ? "" : fallback.modernMaterialName());
+            legacy = config.getString(path + ".material.legacy",
+                    fallback == null ? "" : fallback.legacyMaterialName());
+            legacyData = config.getInt(path + ".material.legacy-data",
+                    fallback == null ? -1 : fallback.legacyData());
+        } else {
+            final String scalar = config.getString(path + ".material",
+                    fallback == null ? "" : fallback.materialName());
+            modern = scalar;
+            legacy = scalar;
+            legacyData = fallback == null ? -1 : fallback.legacyData();
+        }
+        String name = config.getString(path + ".name", null);
+        if (name == null) {
+            name = config.getString(path + ".display-name",
+                    fallback == null ? "" : fallback.name());
+        }
+        if (name == null) {
+            name = fallback == null ? "" : fallback.name();
+        }
+        List<String> lore = config.getStringList(path + ".lore");
+        if ((lore == null || lore.isEmpty()) && fallback != null) {
+            lore = fallback.lore();
+        }
+        if (lore == null) {
+            lore = Collections.emptyList();
+        }
+        try {
+            return new ControlItemDefinition(
+                    modern == null ? "" : modern,
+                    legacy == null ? "" : legacy,
+                    legacyData,
+                    name,
+                    lore);
+        } catch (final IllegalArgumentException ex) {
+            return fallback;
+        }
+    }
+
+    public ControlItemDefinition getControlItem(final String key, final String fallbackMaterial,
+                                                final String fallbackDisplayName) {
+        final ControlItemDefinition fallback = new ControlItemDefinition(
+                fallbackMaterial == null ? "" : fallbackMaterial,
+                fallbackMaterial == null ? "" : fallbackMaterial,
+                -1,
+                fallbackDisplayName == null ? "" : fallbackDisplayName,
+                Collections.emptyList());
+        return getControlItem(key, fallback);
+    }
+
+    public String getInventoryTitleTemplate() {
+        return config.getString("enderchest.title", "Better Ender Chest (Page {page}/{pages})");
     }
 
     public String getTitle() {
-        String title = config.getString("enderchest.title", "enderchest");
-        return translateColor(title);
+        return getInventoryTitleTemplate();
     }
 
     public boolean isAutoSaveEnabled() {
@@ -67,18 +192,16 @@ public class BetterEnderChestConfig {
         return config.getBoolean("debug", false);
     }
 
+    public String getMessageSource(final String key) {
+        return config.getString("messages." + key, "");
+    }
+
     public String getMessage(String key) {
-        String msg = config.getString("messages." + key, "&cMissing message: " + key);
-        return translateColor(msg);
+        return getMessageSource(key);
     }
 
     public String getMessage(String key, String placeholder, String value) {
         String msg = getMessage(key);
         return msg.replace("{" + placeholder + "}", value);
-    }
-
-    private String translateColor(String input) {
-        if (input == null) return "";
-        return ChatColor.translateAlternateColorCodes('&', input);
     }
 }

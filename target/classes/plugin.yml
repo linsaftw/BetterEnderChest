@@ -1,20 +1,30 @@
 name: BetterEnderChest
-version: 1.0.0
+version: 2.0.0
 main: io.linsaftw.betterenderchest.BetterEnderChestPlugin
 softdepend: [LuckPerms]
 author: LinsaFTW
-description: Professional double ender chest plugin with clean storage and Folia-safe scheduling
+description: Professional ender chest plugin with clean storage and Folia-safe scheduling
+api-version: '1.13'
 folia-supported: true
 commands:
   ec:
-    description: Open your double enderchest
+    description: Open your enderchest
     aliases: [enderchest, ech]
     usage: /ec
+  enderchest:
+    description: Open your enderchest
+    aliases: [ec, ech]
+    usage: /enderchest
   ecadmin:
     description: Open another player's enderchest (admin only)
     usage: /ecadmin <player> [clear|view]
     permission: betterenderchest.admin
     aliases: [enderchestadmin]
+  betterenderchest:
+    description: Main BetterEnderChest command
+    usage: /betterenderchest [reload]
+    permission: betterenderchest.use
+    aliases: [bec]
 
 permissions:
   betterenderchest.use:
@@ -23,6 +33,28 @@ permissions:
   betterenderchest.admin:
     description: Allows access to admin enderchest commands
     default: op
+
+  betterenderchest.rows.special:
+    description: Allows the special storage tier
+    default: false
+  betterenderchest.rows.mvp:
+    description: Allows the mvp storage tier
+    default: false
+  betterenderchest.rows.elite:
+    description: Allows the elite storage tier
+    default: false
+  betterenderchest.rows.mythical:
+    description: Allows the mythical storage tier
+    default: false
+  betterenderchest.rows.celestial:
+    description: Allows the celestial storage tier
+    default: false
+  betterenderchest.rows.immortal:
+    description: Allows the immortal storage tier
+    default: false
+  betterenderchest.rows.patron:
+    description: Allows the patron storage tier
+    default: false
 
 # Legacy nodes remain accepted in code for backwards compatibility:
 # - enderchest.use

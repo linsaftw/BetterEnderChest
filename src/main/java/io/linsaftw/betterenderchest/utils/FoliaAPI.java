@@ -7,7 +7,10 @@ import org.bukkit.plugin.Plugin;
 import org.bukkit.scheduler.BukkitScheduler;
 
 import java.lang.reflect.Method;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 public final class FoliaAPI {
 
@@ -128,13 +131,122 @@ public final class FoliaAPI {
         }
     }
 
-    public void runEntity(final Entity entity, final Runnable task) {
+    public CompletableFuture<Boolean> runEntity(final Entity entity, final Runnable task) {
+        final CompletableFuture<Boolean> future = new CompletableFuture<Boolean>();
+        final Runnable wrapped = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    task.run();
+                    future.complete(Boolean.TRUE);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            }
+        };
         if (this.folia) {
-            Object entityScheduler = invoke(this.entityGetScheduler, entity);
-            invoke(this.entitySchedulerExecute, entityScheduler, this.plugin, task, null, 0L);
+            try {
+                final Runnable retired = new Runnable() {
+                    @Override
+                    public void run() {
+                        future.complete(Boolean.FALSE);
+                    }
+                };
+                Object entityScheduler = invoke(this.entityGetScheduler, entity);
+                Object accepted = invoke(this.entitySchedulerExecute, entityScheduler, this.plugin, wrapped, retired, 0L);
+                if (Boolean.FALSE.equals(accepted)) {
+                    future.complete(Boolean.FALSE);
+                }
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
         } else {
-            this.bukkitScheduler.runTask(this.plugin, task);
+            try {
+                this.bukkitScheduler.runTask(this.plugin, wrapped);
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
         }
+        return future;
+    }
+
+    public CompletableFuture<Boolean> runEntityLater(final Entity entity, final Runnable task, final long delayTicks) {
+        final CompletableFuture<Boolean> future = new CompletableFuture<Boolean>();
+        final Runnable wrapped = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    task.run();
+                    future.complete(Boolean.TRUE);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            }
+        };
+        if (this.folia) {
+            try {
+                final Runnable retired = new Runnable() {
+                    @Override
+                    public void run() {
+                        future.complete(Boolean.FALSE);
+                    }
+                };
+                Object entityScheduler = invoke(this.entityGetScheduler, entity);
+                Object accepted = invoke(this.entitySchedulerExecute, entityScheduler, this.plugin, wrapped, retired, delayTicks);
+                if (Boolean.FALSE.equals(accepted)) {
+                    future.complete(Boolean.FALSE);
+                }
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        } else {
+            try {
+                this.bukkitScheduler.runTaskLater(this.plugin, wrapped, delayTicks);
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        }
+        return future;
+    }
+
+    public <T> CompletableFuture<T> callEntity(final Entity entity, final Supplier<T> task) {
+        final CompletableFuture<T> future = new CompletableFuture<T>();
+        final Runnable wrapped = new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    future.complete(task.get());
+                } catch (CancellationException e) {
+                    future.completeExceptionally(e);
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            }
+        };
+        if (this.folia) {
+            try {
+                final Runnable retired = new Runnable() {
+                    @Override
+                    public void run() {
+                        future.completeExceptionally(new CancellationException("entity retired"));
+                    }
+                };
+                Object entityScheduler = invoke(this.entityGetScheduler, entity);
+                Object accepted = invoke(this.entitySchedulerExecute, entityScheduler, this.plugin, wrapped, retired, 0L);
+                if (Boolean.FALSE.equals(accepted)) {
+                    future.completeExceptionally(new CancellationException("entity retired"));
+                }
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        } else {
+            try {
+                this.bukkitScheduler.runTask(this.plugin, wrapped);
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        }
+        return future;
     }
 
     public void cancelPluginTasks() {

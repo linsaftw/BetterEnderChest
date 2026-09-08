@@ -1,11 +1,9 @@
 package io.linsaftw.betterenderchest.storage;
 
-import org.bukkit.inventory.ItemStack;
-
 import java.util.UUID;
 
 public interface ChestRepository {
-    org.bukkit.inventory.Inventory load(UUID ownerUuid, String ownerName, int size, String title);
-    void save(UUID ownerUuid, String ownerName, ItemStack[] contents);
+    ChestData load(UUID ownerUuid, String ownerName);
+    void save(ChestData data);
     boolean exists(UUID ownerUuid);
 }

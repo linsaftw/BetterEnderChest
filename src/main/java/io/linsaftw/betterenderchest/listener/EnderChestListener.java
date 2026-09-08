@@ -1,7 +1,5 @@
 package io.linsaftw.betterenderchest.listener;
 
-import java.util.UUID;
-import java.util.logging.Logger;
 import io.linsaftw.betterenderchest.BetterEnderChestPlugin;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -10,10 +8,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.inventory.Inventory;
 
 public final class EnderChestListener implements Listener {
     private final BetterEnderChestPlugin plugin;
@@ -22,42 +21,46 @@ public final class EnderChestListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler(
-            priority = EventPriority.HIGH
-    )
+    @EventHandler(priority = EventPriority.HIGH)
     public void onPlayerInteract(PlayerInteractEvent event) {
-        if (event.getAction() == Action.RIGHT_CLICK_BLOCK) {
-            Block block = event.getClickedBlock();
-            if (block != null && block.getType() == Material.ENDER_CHEST) {
-                Player player = event.getPlayer();
-                if (!this.plugin.getPermissionService().canUse(player)) {
-                    player.sendMessage(this.plugin.getPluginConfig().getMessage("no-permission"));
-                    event.setCancelled(true);
-                } else {
-                    event.setCancelled(true);
-                    boolean opened = this.plugin.getEnderChestService().openOwnChest(player);
-                    if (!opened) {
-                        player.sendMessage(this.plugin.getPluginConfig().getMessage("chest-in-use"));
-                    }
-                }
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+        Block block = event.getClickedBlock();
+        if (block == null || block.getType() != Material.ENDER_CHEST) {
+            return;
+        }
+        Player player = event.getPlayer();
+        if (!this.plugin.getPermissionService().canUse(player)) {
+            event.setCancelled(true);
+            if (this.plugin.getTextBridge() != null) {
+                this.plugin.getTextBridge().send(player, this.plugin.getPluginConfig().getMessageSource("no-permission"));
+            } else {
+                player.sendMessage(this.plugin.getPluginConfig().getMessage("no-permission"));
             }
+            return;
         }
+        event.setCancelled(true);
+        this.plugin.getEnderChestService().openOwnChest(player);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onInventoryClick(InventoryClickEvent event) {
+        this.plugin.getEnderChestService().handleInventoryClick(event);
+    }
+
+    @EventHandler(priority = EventPriority.HIGH)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        this.plugin.getEnderChestService().handleInventoryDrag(event);
+    }
+
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onInventoryClose(InventoryCloseEvent event) {
-        Player player = (Player) event.getPlayer();
-        Inventory inventory = event.getInventory();
-        if (this.plugin.getEnderChestService().isManagedInventory(inventory)) {
-            final UUID ownerUuid = this.plugin.getEnderChestService().getManagedOwner(inventory);
-            this.plugin.getEnderChestService().releaseViewer(ownerUuid, player.getUniqueId());
-            this.plugin.getEnderChestService().save(ownerUuid);
-        }
+        this.plugin.getEnderChestService().handleInventoryClose(event);
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.NORMAL)
     public void onPlayerQuit(PlayerQuitEvent event) {
-        final Player player = event.getPlayer();
-        this.plugin.getEnderChestService().unload(player.getUniqueId());
+        this.plugin.getEnderChestService().handleViewerQuit(event);
     }
 }

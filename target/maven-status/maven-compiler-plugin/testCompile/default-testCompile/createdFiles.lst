@@ -1,0 +1,9 @@
+io/linsaftw/betterenderchest/resources/PluginDescriptorTest.class
+io/linsaftw/betterenderchest/storage/ChestPersistenceServiceTest$FakeRepository.class
+io/linsaftw/betterenderchest/utils/MaterialsTest.class
+io/linsaftw/betterenderchest/storage/YamlChestRepositoryTest.class
+io/linsaftw/betterenderchest/storage/ChestPersistenceServiceTest.class
+io/linsaftw/betterenderchest/config/BetterEnderChestConfigMigrationTest.class
+io/linsaftw/betterenderchest/text/TextCodecTest.class
+io/linsaftw/betterenderchest/inventory/StorageLayoutTest.class
+io/linsaftw/betterenderchest/service/OwnerInteractionGateTest.class
