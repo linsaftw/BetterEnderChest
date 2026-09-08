@@ -1,0 +1,19 @@
+# Maven build output
+target/
+*.class
+
+# Packaged artifacts (built by `mvn package` into target/)
+*.jar
+
+# Eclipse
+.classpath
+.project
+.factorypath
+.settings/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/

@@ -1,8 +1,0 @@
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/inventory/StorageLayoutTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/config/BetterEnderChestConfigMigrationTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/storage/ChestPersistenceServiceTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/storage/YamlChestRepositoryTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/resources/PluginDescriptorTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/text/TextCodecTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/utils/MaterialsTest.java
-/run/media/linsaftw/SDD/GitHub/LinsaFTW/BetterE-Chest/src/test/java/io/linsaftw/betterenderchest/service/OwnerInteractionGateTest.java
