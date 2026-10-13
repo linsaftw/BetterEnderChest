@@ -30,6 +30,7 @@ public final class OwnerChestSession {
 
   private volatile boolean offlineRecoveryLayout;
   private volatile boolean closing;
+  private volatile boolean clearing;
 
   private final Object lock = new Object();
 
@@ -139,5 +140,13 @@ public final class OwnerChestSession {
 
   public void setClosing(final boolean closing) {
     this.closing = closing;
+  }
+
+  public boolean isClearing() {
+    return clearing;
+  }
+
+  public void setClearing(final boolean clearing) {
+    this.clearing = clearing;
   }
 }

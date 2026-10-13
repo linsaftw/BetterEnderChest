@@ -26,6 +26,7 @@ public final class FoliaAPI {
     private final Method globalCancelTasks;
     private final Method asyncRunNow;
     private final Method asyncCancelTasks;
+    private final Method globalExecute;
 
     public FoliaAPI(final Plugin plugin) {
         if (plugin == null) {
@@ -43,6 +44,7 @@ public final class FoliaAPI {
         Method globalCancel = null;
         Method asyncRun = null;
         Method asyncCancel = null;
+        Method globalExec = null;
 
         if (detectFolia()) {
             try {
@@ -58,6 +60,7 @@ public final class FoliaAPI {
 
                 Class<?> globalRegionSchedulerClass = globalScheduler.getClass();
                 globalRunAtFixed = requireMethod(globalRegionSchedulerClass, "runAtFixedRate", Plugin.class, Consumer.class, long.class, long.class);
+                globalExec = requireMethod(globalRegionSchedulerClass, "execute", Plugin.class, Runnable.class);
                 globalCancel = requireMethod(globalRegionSchedulerClass, "cancelTasks", Plugin.class);
 
                 Class<?> asyncSchedulerClass = asyncSched.getClass();
@@ -82,6 +85,7 @@ public final class FoliaAPI {
         this.globalCancelTasks = globalCancel;
         this.asyncRunNow = asyncRun;
         this.asyncCancelTasks = asyncCancel;
+        this.globalExecute = globalExec;
     }
 
     private boolean detectFolia() {
@@ -120,6 +124,14 @@ public final class FoliaAPI {
             invoke(this.asyncRunNow, this.asyncScheduler, this.plugin, (Consumer<?>) ignored -> task.run());
         } else {
             this.bukkitScheduler.runTaskAsynchronously(this.plugin, task);
+        }
+    }
+
+    public void runGlobal(final Runnable task) {
+        if (this.folia) {
+            invoke(this.globalExecute, this.globalRegionScheduler, this.plugin, task);
+        } else {
+            this.bukkitScheduler.runTask(this.plugin, task);
         }
     }
 

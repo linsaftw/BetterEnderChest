@@ -1,5 +1,7 @@
 package io.linsaftw.betterenderchest.storage;
 
+import org.bukkit.inventory.ItemStack;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashSet;
@@ -58,6 +60,33 @@ public final class ChestPersistenceService {
                     .thenRunAsync(() -> repository.save(data), executor);
             track(ownerUuid, result);
             return logFailure(result, ownerUuid, "save");
+        }
+    }
+
+    public CompletableFuture<ChestData> clear(final UUID ownerUuid, final String ownerName,
+                                                final int minimumRows) {
+        Objects.requireNonNull(ownerUuid, "ownerUuid");
+        Objects.requireNonNull(ownerName, "ownerName");
+        final int effectiveMinimum = Math.max(0, minimumRows);
+        synchronized (this) {
+            rejectIfClosing();
+            final CompletableFuture<Void> previous = tail(ownerUuid);
+            final CompletableFuture<ChestData> result = previous.handle((ignored, failure) -> null)
+                    .thenApplyAsync(ignored -> {
+                        final ChestData disk = repository.load(ownerUuid, ownerName);
+                        int rows = Math.max(effectiveMinimum, disk.lastKnownRows());
+                        if (rows < 0) {
+                            rows = 0;
+                        }
+                        final int slots = Math.max(disk.slotCount(), rows * 9);
+                        final ItemStack[] blank = new ItemStack[slots];
+                        final ChestData blankData = new ChestData(ownerUuid,
+                                disk.ownerName() != null ? disk.ownerName() : ownerName, rows, blank);
+                        repository.save(blankData);
+                        return blankData;
+                    }, executor);
+            track(ownerUuid, result);
+            return logFailure(result, ownerUuid, "clear");
         }
     }
 

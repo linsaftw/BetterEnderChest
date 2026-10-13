@@ -2,6 +2,8 @@ package io.linsaftw.betterenderchest.service;
 
 import io.linsaftw.betterenderchest.config.BetterEnderChestConfig;
 import io.linsaftw.betterenderchest.config.StorageTier;
+import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 
 public class PermissionService {
@@ -23,6 +25,19 @@ public class PermissionService {
                 || player.hasPermission("enderchest.admin")
                 || player.hasPermission("enderchest.admin.lol")
                 || player.isOp();
+    }
+
+    public boolean canAdmin(CommandSender sender) {
+        if (sender instanceof Player) {
+            return canAdmin((Player) sender);
+        }
+        if (sender instanceof ConsoleCommandSender) {
+            return true;
+        }
+        return sender.isOp()
+                || sender.hasPermission(ADMIN_PERMISSION)
+                || sender.hasPermission("enderchest.admin")
+                || sender.hasPermission("enderchest.admin.lol");
     }
 
     public int getStorageRows(final Player player) {

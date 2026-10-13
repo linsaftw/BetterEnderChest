@@ -42,6 +42,34 @@ class PluginDescriptorTest {
         }
     }
 
+    @Test
+    void descriptorDeclaresEcadminAndMainCommandContracts() throws Exception {
+        InputStream in = PluginDescriptorTest.class.getResourceAsStream("/plugin.yml");
+        assertNotNull(in, "plugin.yml must be on test classpath");
+        String content;
+        try (InputStream open = in; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096];
+            int read;
+            while ((read = open.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+            }
+            content = new String(out.toByteArray(), StandardCharsets.UTF_8);
+        }
+
+        assertTrue(content.contains("ecadmin:"), "plugin.yml must declare ecadmin command");
+        assertTrue(content.contains("/ecadmin <player> [clear|view]"),
+                "ecadmin usage must contain [clear|view]");
+        assertTrue(content.contains("permission: betterenderchest.admin"),
+                "ecadmin must require betterenderchest.admin");
+        assertTrue(content.contains("enderchestadmin"),
+                "ecadmin alias enderchestadmin must be retained");
+        assertTrue(content.contains("betterenderchest:"),
+                "plugin.yml must declare betterenderchest command");
+        assertTrue(content.contains("/betterenderchest [reload]"),
+                "betterenderchest usage must advertise reload");
+        assertTrue(content.contains("[bec]"), "betterenderchest alias bec must be retained");
+    }
+
     private static Map<String, String> parsePermissionDefaults(String content) {
         Map<String, String> defaults = new HashMap<>();
         String current = null;

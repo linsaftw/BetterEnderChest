@@ -52,6 +52,8 @@ public class BetterEnderChestConfig {
             config.set("enderchest.save-interval-seconds", 300);
         }
 
+        migrateAdminMessages(config);
+
         plugin.saveConfig();
     }
 
@@ -73,6 +75,31 @@ public class BetterEnderChestConfig {
             changed = true;
         } else if (defaultRows < 1 || defaultRows > 6) {
             config.set("storage.default-rows", Math.max(1, Math.min(defaultRows, 6)));
+            changed = true;
+        }
+        return changed;
+    }
+
+    static final String LEGACY_ADMIN_USAGE = "&cUsage: /ecadmin <player>";
+    static final String ADMIN_USAGE_DEFAULT = "&cUsage: /ecadmin <player> [clear|view]";
+    static final String ADMIN_CHEST_CLEARED_DEFAULT = "&aCleared {player}'s enderchest.";
+    static final String ADMIN_CLEAR_BUSY_DEFAULT = "&cCannot clear {player}'s enderchest while it is open or loading. Close it and retry.";
+
+    static boolean migrateAdminMessages(final FileConfiguration config) {
+        boolean changed = false;
+        if (!config.contains("messages.admin-usage")) {
+            config.set("messages.admin-usage", ADMIN_USAGE_DEFAULT);
+            changed = true;
+        } else if (LEGACY_ADMIN_USAGE.equals(config.getString("messages.admin-usage"))) {
+            config.set("messages.admin-usage", ADMIN_USAGE_DEFAULT);
+            changed = true;
+        }
+        if (!config.contains("messages.admin-chest-cleared")) {
+            config.set("messages.admin-chest-cleared", ADMIN_CHEST_CLEARED_DEFAULT);
+            changed = true;
+        }
+        if (!config.contains("messages.admin-clear-busy")) {
+            config.set("messages.admin-clear-busy", ADMIN_CLEAR_BUSY_DEFAULT);
             changed = true;
         }
         return changed;

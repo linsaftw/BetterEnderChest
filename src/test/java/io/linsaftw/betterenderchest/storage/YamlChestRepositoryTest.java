@@ -19,6 +19,7 @@ import java.util.logging.Logger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class YamlChestRepositoryTest {
     private static final Logger LOGGER = Logger.getLogger(YamlChestRepositoryTest.class.getName());
@@ -153,6 +154,34 @@ class YamlChestRepositoryTest {
         assertEquals(last, reloaded[53]);
         for (int slot = 1; slot < 53; slot++) {
             assertNull(reloaded[slot]);
+        }
+    }
+
+    @Test
+    void savingEmptyRetainsRowsAndRemovesEveryItem(@TempDir final Path dataFolder) {
+        final UUID owner = UUID.randomUUID();
+        final ItemStack first = new ItemStack(Material.STONE, 1);
+        final ItemStack lastPage = new ItemStack(Material.DIAMOND_SWORD, 1);
+        final ItemStack highSlot = new ItemStack(Material.EMERALD, 1);
+        final ItemStack[] contents = new ItemStack[63];
+        contents[0] = first;
+        contents[53] = lastPage;
+        contents[62] = highSlot;
+        final YamlChestRepository repository = new YamlChestRepository(LOGGER, dataFolder);
+
+        repository.save(new ChestData(owner, "Player", 6, contents));
+        final ChestData loaded = repository.load(owner, "Fallback");
+        assertEquals(first, loaded.copyContents()[0]);
+        assertEquals(lastPage, loaded.copyContents()[53]);
+        assertEquals(highSlot.serialize(), loaded.copyContents()[62].serialize());
+
+        repository.save(ChestData.empty(owner, "Player", 6));
+        final ChestData reloaded = repository.load(owner, "Fallback");
+
+        assertEquals(6, reloaded.lastKnownRows());
+        assertTrue(reloaded.slotCount() >= 54);
+        for (final ItemStack item : reloaded.copyContents()) {
+            assertNull(item);
         }
     }
 }

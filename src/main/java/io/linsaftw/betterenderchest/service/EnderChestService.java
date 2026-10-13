@@ -30,12 +30,14 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
 public class EnderChestService {
-    public enum OpenResult { STARTED, SHUTTING_DOWN }
+    public enum OpenResult { STARTED, SHUTTING_DOWN, BUSY }
+    public enum ClearResult { CLEARED, BUSY, SHUTTING_DOWN }
 
     private final BetterEnderChestPlugin plugin;
     private final BetterEnderChestConfig config;
@@ -66,9 +68,11 @@ public class EnderChestService {
         final int authRows = clampRows(permissions.getStorageRows(player));
         final OwnerChestSession owner = getOrCreateOwnerSession(player.getUniqueId(), player.getName(), authRows);
         loadOwnerOnce(owner, player.getName());
-        reconcileVisibleRows(owner, authRows, false);
-        openViewerPage(player, owner, 0);
-        return OpenResult.STARTED;
+        synchronized (owner) {
+            if (owner.isClearing()) return OpenResult.BUSY;
+            reconcileVisibleRows(owner, authRows, false);
+        }
+        return openViewerPage(player, owner, 0);
     }
 
     public OpenResult openAdminChest(final Player viewer, final UUID ownerUuid, final String ownerName) {
@@ -82,9 +86,12 @@ public class EnderChestService {
                 if (shuttingDown || failure != null) return;
                 final int liveRows = rows == null ? config.getStorageDefaultRows() : clampRows(rows.intValue());
                 final OwnerChestSession owner = getOrCreateOwnerSession(ownerUuid, safeName, liveRows);
-                owner.setOwnerName(target.getName() == null ? safeName : target.getName());
-                loadOwnerOnce(owner, owner.getOwnerName());
-                reconcileVisibleRows(owner, liveRows, false);
+                synchronized (owner) {
+                    if (shuttingDown || owner.isClearing()) return;
+                    owner.setOwnerName(target.getName() == null ? safeName : target.getName());
+                    loadOwnerOnce(owner, owner.getOwnerName());
+                    reconcileVisibleRows(owner, liveRows, false);
+                }
                 folia.runEntity(viewer, new Runnable() {
                     @Override public void run() {
                         if (!shuttingDown && viewer.isOnline()) openViewerPage(viewer, owner, 0);
@@ -103,9 +110,15 @@ public class EnderChestService {
                             ? config.getStorageDefaultRows()
                             : Math.max(config.getStorageDefaultRows(),
                                 Math.max(data.lastKnownRows(), data.occupiedRows()));
-                    reconcileVisibleRows(owner, clampRows(recovery), true);
+                    synchronized (owner) {
+                        if (!shuttingDown && !owner.isClearing()) reconcileVisibleRows(owner, clampRows(recovery), true);
+                    }
                 } catch (Exception ignored) {
-                    reconcileVisibleRows(owner, config.getStorageDefaultRows(), true);
+                    synchronized (owner) {
+                        if (!shuttingDown && !owner.isClearing()) {
+                            reconcileVisibleRows(owner, config.getStorageDefaultRows(), true);
+                        }
+                    }
                 }
                 folia.runEntity(viewer, new Runnable() {
                     @Override public void run() {
@@ -115,6 +128,99 @@ public class EnderChestService {
             }
         });
         return OpenResult.STARTED;
+    }
+
+    public CompletableFuture<ClearResult> clearChest(final UUID ownerUuid, final String ownerName) {
+        if (ownerUuid == null) {
+            final CompletableFuture<ClearResult> rejected = new CompletableFuture<>();
+            rejected.completeExceptionally(new IllegalArgumentException("ownerUuid must not be null"));
+            return rejected;
+        }
+        if (shuttingDown) return CompletableFuture.completedFuture(ClearResult.SHUTTING_DOWN);
+        final String safeName = ownerName == null ? ownerUuid.toString() : ownerName;
+        final OwnerChestSession owner = getOrCreateOwnerSession(ownerUuid, safeName,
+                config.getStorageDefaultRows());
+        final Optional<OwnerInteractionGate.Lease> admin = owner.getInteractionGate()
+                .tryAcquire(UUID.randomUUID(), UUID.randomUUID());
+        if (!admin.isPresent()) return CompletableFuture.completedFuture(ClearResult.BUSY);
+        final OwnerInteractionGate.Lease lease = admin.get();
+        final int minRows;
+        final String clearName;
+        synchronized (owner) {
+            if (owner.isClearing() || !owner.getViewers().isEmpty() || owner.isLoading()) {
+                owner.getInteractionGate().release(lease);
+                return CompletableFuture.completedFuture(ClearResult.BUSY);
+            }
+            CompletableFuture<ChestData> loadFuture = owner.getLoadFuture();
+            if (loadFuture != null && !loadFuture.isDone()) {
+                owner.getInteractionGate().release(lease);
+                return CompletableFuture.completedFuture(ClearResult.BUSY);
+            }
+            if (loadFuture != null && loadFuture.isCompletedExceptionally()) {
+                final Throwable loadFailure = extractFailure(loadFuture);
+                owner.setLoadFuture(null);
+                owner.getInteractionGate().release(lease);
+                if (owner.getData() == null) {
+                    final CompletableFuture<ClearResult> failed = new CompletableFuture<>();
+                    failed.completeExceptionally(loadFailure == null
+                            ? new IllegalStateException("Failed to load chest for " + ownerUuid)
+                            : loadFailure);
+                    return failed;
+                }
+                return CompletableFuture.completedFuture(ClearResult.BUSY);
+            }
+            if (shuttingDown) {
+                owner.getInteractionGate().release(lease);
+                return CompletableFuture.completedFuture(ClearResult.SHUTTING_DOWN);
+            }
+            final ChestData memory = owner.getData();
+            final int known = memory == null ? 0 : Math.max(memory.lastKnownRows(), memory.occupiedRows());
+            minRows = clampRows(Math.max(config.getStorageDefaultRows(),
+                    Math.max(owner.getVisibleRows(), known)));
+            clearName = owner.getOwnerName();
+            owner.setClearing(true);
+        }
+        final CompletableFuture<ClearResult> result = new CompletableFuture<>();
+        final CompletableFuture<ChestData> clearFuture;
+        try {
+            clearFuture = persistence.clear(owner.getOwnerUuid(), clearName, minRows);
+        } catch (Exception ex) {
+            synchronized (owner) {
+                owner.setClearing(false);
+            }
+            owner.getInteractionGate().release(lease);
+            result.completeExceptionally(ex);
+            return result;
+        }
+        if (clearFuture == null) {
+            synchronized (owner) {
+                owner.setClearing(false);
+            }
+            owner.getInteractionGate().release(lease);
+            result.completeExceptionally(new IllegalStateException("Failed to clear chest for " + ownerUuid));
+            return result;
+        }
+        clearFuture.whenComplete((savedBlank, failure) -> {
+            if (failure != null || savedBlank == null) {
+                synchronized (owner) {
+                    owner.setClearing(false);
+                }
+                owner.getInteractionGate().release(lease);
+                result.completeExceptionally(failure != null ? unwrapFailure(failure)
+                        : new IllegalStateException("Failed to clear chest for " + ownerUuid));
+                return;
+            }
+            synchronized (owner) {
+                final int visible = clampRows(Math.max(owner.getVisibleRows(), savedBlank.lastKnownRows()));
+                owner.setDataAndRows(savedBlank, visible, false);
+                owner.getClassicPageInventories().clear();
+                owner.incrementRevision();
+                owner.setClearing(false);
+            }
+            owner.getInteractionGate().release(lease);
+            result.complete(ClearResult.CLEARED);
+        });
+        return result;
     }
 
     public void handleInventoryClick(final InventoryClickEvent event) {
@@ -230,13 +336,16 @@ public class EnderChestService {
     public void scheduleAutoSavePass() {
         if (shuttingDown) return;
         for (OwnerChestSession owner : owners.values()) {
-            if (owner.getInteractionGate().isBusy()) continue;
-            final ChestData snapshot = snapshotOwner(owner);
-            if (snapshot == null) continue;
-            try {
-                persistence.save(snapshot);
-            } catch (Exception ex) {
-                plugin.getLogger().log(Level.SEVERE, "Autosave failed for " + owner.getOwnerUuid(), ex);
+            synchronized (owner) {
+                if (owner.getInteractionGate().isBusy()) continue;
+                if (owner.isClearing()) continue;
+                final ChestData snapshot = snapshotOwner(owner);
+                if (snapshot == null) continue;
+                try {
+                    persistence.save(snapshot);
+                } catch (Exception ex) {
+                    plugin.getLogger().log(Level.SEVERE, "Autosave failed for " + owner.getOwnerUuid(), ex);
+                }
             }
         }
     }
@@ -246,8 +355,11 @@ public class EnderChestService {
         shuttingDown = true;
         final List<ChestData> snapshots = new ArrayList<>();
         for (OwnerChestSession owner : owners.values()) {
-            final ChestData snapshot = snapshotOwner(owner);
-            if (snapshot != null) snapshots.add(snapshot);
+            synchronized (owner) {
+                if (owner.isClearing()) continue;
+                final ChestData snapshot = snapshotOwner(owner);
+                if (snapshot != null) snapshots.add(snapshot);
+            }
         }
         try {
             persistence.flushAndClose(snapshots);
@@ -333,6 +445,7 @@ public class EnderChestService {
     private void loadOwnerOnce(final OwnerChestSession owner, final String ownerName) {
         if (owner.getData() != null) return;
         synchronized (owner) {
+            if (owner.isClearing()) return;
             if (owner.getLoadFuture() != null) return;
             final CompletableFuture<ChestData> future;
             try {
@@ -360,11 +473,16 @@ public class EnderChestService {
         }
     }
 
-    private void openViewerPage(final Player viewer, final OwnerChestSession owner, final int pageIndex) {
-        ViewerChestSession view = owner.getViewers().get(viewer.getUniqueId());
-        if (view == null) {
-            view = new ViewerChestSession(viewer.getUniqueId());
-            bindViewer(owner, view);
+    private OpenResult openViewerPage(final Player viewer, final OwnerChestSession owner, final int pageIndex) {
+        final ViewerChestSession view;
+        synchronized (owner) {
+            if (owner.isClearing()) return OpenResult.BUSY;
+            ViewerChestSession existing = owner.getViewers().get(viewer.getUniqueId());
+            if (existing == null) {
+                existing = new ViewerChestSession(viewer.getUniqueId());
+                bindViewer(owner, existing);
+            }
+            view = existing;
         }
         final StorageLayout layout = StorageLayout.forRows(Math.max(1, owner.getVisibleRows()));
         final int clamped = Math.max(0, Math.min(pageIndex, layout.pageCount() - 1));
@@ -382,6 +500,7 @@ public class EnderChestService {
         } finally {
             if (nav != null) owner.getInteractionGate().release(nav);
         }
+        return OpenResult.STARTED;
     }
 
     private Inventory getOrCreateClassicPage(final OwnerChestSession owner, final StorageLayout.Page page) {
@@ -612,12 +731,15 @@ public class EnderChestService {
     private void queueSave(final UUID ownerUuid) {
         final OwnerChestSession owner = owners.get(ownerUuid);
         if (owner == null) return;
-        final ChestData snapshot = snapshotOwner(owner);
-        if (snapshot == null) return;
-        try {
-            persistence.save(snapshot);
-        } catch (Exception ex) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to save chest for " + ownerUuid, ex);
+        synchronized (owner) {
+            if (owner.isClearing()) return;
+            final ChestData snapshot = snapshotOwner(owner);
+            if (snapshot == null) return;
+            try {
+                persistence.save(snapshot);
+            } catch (Exception ex) {
+                plugin.getLogger().log(Level.SEVERE, "Failed to save chest for " + ownerUuid, ex);
+            }
         }
     }
 
@@ -625,6 +747,22 @@ public class EnderChestService {
         final ChestData data = owner.getData();
         if (data == null) return null;
         return new ChestData(data.ownerUuid(), data.ownerName(), data.lastKnownRows(), data.copyContents());
+    }
+
+    private static Throwable extractFailure(final CompletableFuture<?> future) {
+        try {
+            future.join();
+            return null;
+        } catch (CompletionException ex) {
+            return ex.getCause() == null ? ex : ex.getCause();
+        } catch (Exception ex) {
+            return ex;
+        }
+    }
+
+    private static Throwable unwrapFailure(final Throwable failure) {
+        if (failure instanceof CompletionException && failure.getCause() != null) return failure.getCause();
+        return failure;
     }
 
     private void detachViewer(final OwnerChestSession owner, final ViewerChestSession view, final UUID viewerUuid) {

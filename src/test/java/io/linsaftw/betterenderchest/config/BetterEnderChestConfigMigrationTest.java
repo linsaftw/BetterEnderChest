@@ -114,6 +114,60 @@ class BetterEnderChestConfigMigrationTest {
         assertEquals("&ePrevious Page", wrapper.getControlItem("previous-page", "STONE", "Fallback").name());
     }
 
+    @Test
+    void staleAdminUsageDefaultIsMigratedToNewDefault() {
+        final YamlConfiguration config = new YamlConfiguration();
+        config.set("messages.admin-usage", "&cUsage: /ecadmin <player>");
+
+        assertTrue(BetterEnderChestConfig.migrateAdminMessages(config));
+
+        assertEquals("&cUsage: /ecadmin <player> [clear|view]",
+                config.getString("messages.admin-usage"));
+        assertEquals("&aCleared {player}'s enderchest.",
+                config.getString("messages.admin-chest-cleared"));
+        assertEquals("&cCannot clear {player}'s enderchest while it is open or loading. Close it and retry.",
+                config.getString("messages.admin-clear-busy"));
+    }
+
+    @Test
+    void customizedAdminUsageIsPreserved() {
+        final YamlConfiguration config = new YamlConfiguration();
+        config.set("messages.admin-usage", "&cCustom usage");
+        config.set("messages.admin-chest-cleared", "&aCustom cleared");
+
+        assertTrue(BetterEnderChestConfig.migrateAdminMessages(config));
+
+        assertEquals("&cCustom usage", config.getString("messages.admin-usage"));
+        assertEquals("&aCustom cleared", config.getString("messages.admin-chest-cleared"));
+        assertEquals("&cCannot clear {player}'s enderchest while it is open or loading. Close it and retry.",
+                config.getString("messages.admin-clear-busy"));
+    }
+
+    @Test
+    void missingAdminMessageKeysGetDefaults() {
+        final YamlConfiguration config = new YamlConfiguration();
+
+        assertTrue(BetterEnderChestConfig.migrateAdminMessages(config));
+
+        assertEquals("&cUsage: /ecadmin <player> [clear|view]",
+                config.getString("messages.admin-usage"));
+        assertEquals("&aCleared {player}'s enderchest.",
+                config.getString("messages.admin-chest-cleared"));
+        assertEquals("&cCannot clear {player}'s enderchest while it is open or loading. Close it and retry.",
+                config.getString("messages.admin-clear-busy"));
+    }
+
+    @Test
+    void currentAdminMessagesAreUntouched() {
+        final YamlConfiguration config = new YamlConfiguration();
+        config.set("messages.admin-usage", "&cUsage: /ecadmin <player> [clear|view]");
+        config.set("messages.admin-chest-cleared", "&aCleared {player}'s enderchest.");
+        config.set("messages.admin-clear-busy",
+                "&cCannot clear {player}'s enderchest while it is open or loading. Close it and retry.");
+
+        assertFalse(BetterEnderChestConfig.migrateAdminMessages(config));
+    }
+
     private static BetterEnderChestConfig newWrapper(final YamlConfiguration config) throws Exception {
         final BetterEnderChestConfig wrapper = new BetterEnderChestConfig(null);
         final Field field = BetterEnderChestConfig.class.getDeclaredField("config");
